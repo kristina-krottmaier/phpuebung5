@@ -29,6 +29,9 @@
                 <li <?php if (View::checkForActiveController($filename, "note")) { echo ' class="active" '; } ?> >
                     <a href="<?php echo Config::get('URL'); ?>note/index">My Notes</a>
                 </li>
+                <li <?php if (View::checkForActiveController($filename, "message")) { echo ' class="active" '; } ?> >
+                    <a href="<?php echo Config::get('URL'); ?>message/index">Messages</a>
+                </li>
             <?php } else { ?>
                 <!-- for not logged in users -->
                 <li <?php if (View::checkForActiveControllerAndAction($filename, "login/index")) { echo ' class="active" '; } ?> >
@@ -59,6 +62,9 @@
                         <a href="<?php echo Config::get('URL'); ?>user/changePassword">Change Password</a>
                     </li>
                     <li <?php if (View::checkForActiveController($filename, "login")) { echo ' class="active" '; } ?> >
+                        <a href="<?php echo Config::get('URL'); ?>login/logout">Logout</a>
+                    </li>
+                     <li <?php if (View::checkForActiveController($filename, "login")) { echo ' class="active" '; } ?> >
                         <a href="<?php echo Config::get('URL'); ?>login/logout">Logout</a>
                     </li>
                 </ul>
