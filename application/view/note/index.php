@@ -4,11 +4,7 @@
 
         <!-- echo out the system feedback (error and success messages) -->
         <?php $this->renderFeedbackMessages(); ?>
-
-        <h3>What happens here ?</h3>
-        <p>
-            This is just a simple CRUD implementation. Creating, reading, updating and deleting things.
-        </p>
+        <h3>My Notes:</h3>
         <p>
             <form method="post" action="<?php echo Config::get('URL');?>note/create">
                 <label>Text of new note: </label><input type="text" name="note_text" />
