@@ -8,7 +8,9 @@
 
 ![Screenshot](image/Screenshot1.png)
 ![Screenshot](image/Screenshot2.png)
+![Screenshot](image/Screenshot3.png)
+![Screenshot](image/Screenshot4.png)
 
 ##  Technologie:
 **ai model:** GPT-5 mini
-**sprache:** php
+**Sprache:** php
