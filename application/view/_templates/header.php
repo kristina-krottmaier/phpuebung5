@@ -64,9 +64,6 @@
                     <li <?php if (View::checkForActiveController($filename, "login")) { echo ' class="active" '; } ?> >
                         <a href="<?php echo Config::get('URL'); ?>login/logout">Logout</a>
                     </li>
-                     <li <?php if (View::checkForActiveController($filename, "login")) { echo ' class="active" '; } ?> >
-                        <a href="<?php echo Config::get('URL'); ?>login/logout">Logout</a>
-                    </li>
                 </ul>
             </li>
             <?php if (Session::get("user_account_type") == 7) : ?>
