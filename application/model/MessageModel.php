@@ -2,54 +2,61 @@
 
 /**
  * MessageModel
- * Handles creation, retrieval and deletion of messages between users.
  */
 class MessageModel
 {
     /**
-     * Get all messages for the current user (sent or received)
-     * @return array an array of message objects
+     * Get all messages for the current user
+     * in controller= MessageController::list()
      */
     public static function getAllMessages()
     {
         $database = DatabaseFactory::getFactory()->getConnection();
 
         $user_id = Session::get('user_id');
+
         if (empty($user_id)) {
-            // no logged-in user, return empty result set
             return [];
         }
-
         $sql = "SELECT message_id, sender_id, recipient_id, subject, body, created_at
                 FROM messages
                 WHERE sender_id = :user_id OR recipient_id = :user_id
-                ORDER BY created_at DESC";
+                ORDER BY created_at ASC";
         $query = $database->prepare($sql);
         $query->execute([':user_id' => $user_id]);
 
         return $query->fetchAll(PDO::FETCH_OBJ);
     }
 
-        /**
-     * Get a single message
-     * @param int $message_id id of the specific message
-     * @return object a single object (the result)
+    /**
+     * Get conversation messages between current user and another user
+     * in controller= MessageController::list($other_user_id)
      */
-    public static function getMessage($message_id)
+    public static function getConversation($other_user_id)
     {
         $database = DatabaseFactory::getFactory()->getConnection();
-
+        $user_id = Session::get('user_id');
+        
+        if (empty($user_id) || empty($other_user_id)) {
+            return [];
+        }
         $sql = "SELECT message_id, sender_id, recipient_id, subject, body, created_at
                 FROM messages
-                WHERE message_id = :message_id AND (sender_id = :user_id OR recipient_id = :user_id)
-                LIMIT 1";
+                WHERE (sender_id = :user_id AND recipient_id = :other_id)
+                   OR (sender_id = :other_id AND recipient_id = :user_id)
+                ORDER BY created_at ASC";
         $query = $database->prepare($sql);
-        $query->execute([':message_id' => $message_id, ':user_id' => Session::get('user_id')]);
+        $query->execute([':user_id' => $user_id, ':other_id' => $other_user_id]);
 
-        return $query->fetch(PDO::FETCH_OBJ);
+        return $query->fetchAll(PDO::FETCH_OBJ);
     }
 
-    public static function saveMessage($recipient_id, $subject, $body)
+    /**
+     * Save a new message
+     * used to create/send a message
+     * in controller=  MessageController::sendMessage()
+     */
+    public static function sendMessage($recipient_id, $subject, $body)
     {
         $database = DatabaseFactory::getFactory()->getConnection();
 
@@ -68,6 +75,12 @@ class MessageModel
         }
         return false;
     }
+
+    /**
+     * Delete a message by its ID
+     * in controller= MessageController::deleteMessage()
+     * Not used currently
+     */
     public static function deleteMessage($message_id)
     {
         $database = DatabaseFactory::getFactory()->getConnection();
@@ -81,9 +94,14 @@ class MessageModel
             return true;
         }
     }
-    public static function createGroup($group_name, $member_ids)
+
+    /**
+     * Format a timestamp into a human-readable string
+     * in controller= MessageController::timestamp()
+     */
+    public static function formatTimestamp($created_at)
     {
-
-
+        $dt = new DateTime($created_at);
+        return $dt->format('H:i');
     }
 }

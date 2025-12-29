@@ -1,7 +1,7 @@
 <?php
 
 /**
- * The note controller: Just an example of simple create, read, update and delete (CRUD) actions.
+ * The Message controller
  */
 class MessageController extends Controller
 {
@@ -18,34 +18,37 @@ class MessageController extends Controller
         Auth::checkAuthentication();
     }
 
-    public function index()
-    {
-        $this->View->render('message/index', array(
-            'messages' => MessageModel::getAllMessages()
-        ));
-    }
-
-
-    public function showMessage()
-    {
-        MessageModel::getMessage(Request::post('message_id'));
-        Redirect::to('message');
-    }
+public function index()
+{
+    $this->View->render('message/index', [
+        'users' => UserModel::getPublicProfilesOfAllUsers(),
+        'current_user_id' => (int) Session::get('user_id'),
+        'messages' => [],
+    ]);
+}
 /**
  * Return JSON list of messages for current user (used by AJAX).
  */
-public function list()
+public function list($other_user_id = null)
 {
-    $messages = MessageModel::getAllMessages();
+    $current_user_id = (int) Session::get('user_id');
+    $messages = $other_user_id
+        ? MessageModel::getConversation((int) $other_user_id)
+        : MessageModel::getAllMessages();
 
-    $out = array();
-    if (!empty($messages)) {
-        foreach ($messages as $m) {
-            $out[] = array(
-                'message_id' => (int) $m->message_id,
-                'body'       => (string) $m->body,
-            );
-        }
+    $out = [];
+    foreach (($messages ?? []) as $m) {
+        $sender_id = (int) $m->sender_id;
+
+        $out[] = [
+            'message_id' => (int) $m->message_id,
+            'sender_id'  => $sender_id,
+            'recipient_id' => isset($m->recipient_id) ? (int) $m->recipient_id : null,
+            'subject'    => (string) $m->subject,
+            'body'       => (string) $m->body,
+            'created_at' => MessageModel::formatTimestamp($m->created_at),
+            'is_mine'    => $sender_id === $current_user_id,
+        ];
     }
 
     header('Content-Type: application/json; charset=utf-8');
@@ -60,47 +63,47 @@ public function list()
 public function create()
 {
     $text = trim(Request::post('message_text'));
+    $recipientId = (int) Request::post('recipient_id');
 
     if ($text === '' || $text === null) {
         http_response_code(400);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(array('success' => false, 'error' => 'Empty message'));
+        echo json_encode(['success' => false, 'error' => 'Empty message']);
         return;
     }
 
-    // store as self message — change this if you have a recipient selection
-    $recipientId = Session::get('user_id');
-    $saved = MessageModel::saveMessage($recipientId, null, $text);
+    if ($recipientId <= 0) {
+        http_response_code(400);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'error' => 'Invalid recipient']);
+        return;
+    }
+
+    $saved = MessageModel::sendMessage($recipientId, null, $text);
 
     header('Content-Type: application/json; charset=utf-8');
     if ($saved) {
-        echo json_encode(array('success' => true));
+        echo json_encode(['success' => true]);
     } else {
         http_response_code(500);
-        echo json_encode(array('success' => false));
+        echo json_encode(['success' => false]);
     }
 }
 
     public function sendMessage()
     {
-        MessageModel::saveMessage(Request::post('recipient_id'), Request::post('subject'), Request::post('body'));
+        MessageModel::sendMessage(Request::post('recipient_id'), Request::post('subject'), Request::post('body'));
         Redirect::to('message');
     }
 
-    /**
-     * This method controls what happens when you move to /message/edit(/XX) in your app.
-     * Shows the current content of the message and an editing form.
-     * @param $message_id int id of the message
-     */
-    public function edit($message_id)
-    {
-        $this->View->render('message/edit', array(
-            'message' => MessageModel::getMessage($message_id)
-        ));
-    }
     public function delete($message_id)
     {
         MessageModel::deleteMessage($message_id);
         Redirect::to('message');
+    }
+    public function timestamp()
+    {
+        MessageModel::formatTimestamp(Request::post('timestamp'));
+        $this->View->render('message');
     }
 }

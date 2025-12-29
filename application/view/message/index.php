@@ -1,132 +1,223 @@
 <div class="container">
     <h1>Messages</h1>
-    <div class="box">
+    <?php $this->renderFeedbackMessages(); ?>
+    <div class="box with-sidebar">
 
-        <?php $this->renderFeedbackMessages(); ?>
+        <!-- Sidebar -->
+        <div id="user-list">
+            <h3>Users</h3>
+            <div id="users">
+                <?php if (!empty($this->users) && is_array($this->users)) : ?>
+                    <?php foreach ($this->users as $u) : ?>
+                        <button class="user-btn" type="button"
+                                data-userid="<?= (int)$u->user_id; ?>">
+                            <?= htmlentities($u->user_name, ENT_QUOTES, 'UTF-8'); ?>
+                        </button>
+                    <?php endforeach; ?>
+                <?php else : ?>
+                    <div>No users</div>
+                <?php endif; ?>
+            </div>
 
-        <h3>My Messages:</h3>
-        <div id="chat-window" style="border:1px solid #ccc; height:300px; overflow:auto; padding:10px; background:#fafafa;">
-            <ul id="messages" style="list-style:none; margin:0; padding:0;">
-                <?php if (!empty($this->messages) && (is_array($this->messages) || $this->messages instanceof Traversable)) {
-                    foreach($this->messages as $message) { ?>
-                        <li data-id="<?= intval($message->message_id); ?>" style="margin-bottom:8px;">
-                            <strong>#<?= intval($message->message_id); ?>:</strong>
-                            <span><?= htmlentities($message->body, ENT_QUOTES, 'UTF-8'); ?></span>
-                        </li>
-                    <?php }
-                } else { ?>
-                    <li>No messages yet.</li>
-                <?php } ?>
-            </ul>
+            <div class="sidebar-actions">
+                <button class="user-btn" id="btn-all" type="button">All messages</button>
+            </div>
         </div>
 
-        <form id="chat-form" method="post" action="<?= htmlspecialchars(Config::get('URL') . 'message/create', ENT_QUOTES, 'UTF-8'); ?>" style="margin-top:10px;">
-            <input type="text" id="message_text" name="message_text" placeholder="Type a message..." autocomplete="off" style="width:80%;" />
-            <input type="submit" value="Send" />
-        </form>
+        <!-- Main panel -->
+        <div class="main-panel">
+            <h3 id="chat-title">All Messages</h3>
 
+            <div id="chat-window">
+                <ul id="messages">
+
+                    <li class="empty">Loading…</li>
+                </ul>
+            </div>
+
+            <form id="chat-form" method="post" action="<?= htmlspecialchars(Config::get('URL') . 'message/create', ENT_QUOTES, 'UTF-8'); ?>">
+                <input type="text" id="message_text" name="message_text"
+                       placeholder="Type a message..." autocomplete="off" />
+                <input type="submit" value="Send" />
+            </form>
+        </div>
     </div>
 </div>
 
 <script>
-(function(){
-// derive application base path from Config URL (root-relative), e.g. '/lbs/phpuebung5'
-const basePath = '<?= rtrim(parse_url(Config::get("URL"), PHP_URL_PATH), "/"); ?>';
-const messagesEl = document.getElementById('messages');
-const chatWindow = document.getElementById('chat-window');
-const form = document.getElementById('chat-form');
-const input = document.getElementById('message_text');
+(function () {
+    // IMPORTANT: Config::get('URL') already contains the correct base url, no 'index.php' here!
+    const baseUrl = <?= json_encode(rtrim(Config::get('URL'), '/')); ?>;
 
-    // render messages array (each item: {message_id, body})
+    const messagesEl = document.getElementById('messages');
+    const chatWindow = document.getElementById('chat-window');
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('message_text');
+    const usersContainer = document.getElementById('users');
+    const chatTitle = document.getElementById('chat-title');
+    const btnAll = document.getElementById('btn-all');
+
+    let selectedUserId = null;
+
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/[&"'<>]/g, c => ({'&':'&amp;','"':'&quot;',"'":'&#39;','<':'&lt;','>':'&gt;'}[c]));
+    }
+
+    function setTitle() {
+        if (!selectedUserId) {
+            chatTitle.textContent = 'All Messages';
+            return;
+        }
+        const btn = document.querySelector('.user-btn[data-userid="' + selectedUserId + '"]');
+        chatTitle.textContent = btn ? ('Chat with ' + btn.textContent) : 'Chat';
+    }
+
     function renderMessages(items) {
-        // keep track of existing ids to avoid flicker
-        const existing = {};
-        Array.from(messagesEl.children).forEach(li => {
-            const id = li.getAttribute('data-id');
-            if (id) existing[id] = true;
-        });
-
-        // clear and re-render (simple approach)
-        messagesEl.innerHTML = '';
         if (!items || items.length === 0) {
-            const li = document.createElement('li');
-            li.textContent = 'No messages yet.';
-            messagesEl.appendChild(li);
+            messagesEl.innerHTML = '<li class="empty">No messages yet.</li>';
             return;
         }
 
-        items.forEach(item => {
-            const li = document.createElement('li');
-            li.setAttribute('data-id', item.message_id);
-            li.style.marginBottom = '8px';
-            const strong = document.createElement('strong');
-            strong.textContent = '#' + item.message_id + ': ';
-            const span = document.createElement('span');
-            span.textContent = item.body;
-            li.appendChild(strong);
-            li.appendChild(span);
-            messagesEl.appendChild(li);
-        });
+        messagesEl.innerHTML = items.map(item => {
+            const label = item.created_at ? item.created_at : ('#' + item.message_id);
+            const mine = item.is_mine === true;
 
-        // scroll to bottom
-        chatWindow.scrollTop = chatWindow.scrollHeight;
+            return (
+                '<li data-id="' + esc(item.message_id) + '" class="' + (mine ? 'mine' : '') + '">' +
+                    '<strong>' + esc(label) + '</strong>' +
+                    '<span>' + esc(item.body) + '</span>' +
+                '</li>'
+            );
+        }).join('');
+
     }
 
-    // fetch messages (expects JSON array)
     async function fetchMessages() {
         try {
-            const res = await fetch(basePath + '/message/list', { cache: 'no-store', credentials: 'same-origin' });
+            const url = selectedUserId
+                ? (baseUrl + '/message/list/' + selectedUserId)
+                : (baseUrl + '/message/list');
+
+            const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
             if (!res.ok) return;
+
             const data = await res.json();
-            renderMessages(data);
-        } catch (e) {
-            // fail silently
-            console.error('fetchMessages error', e);
+            renderMessages(data || []);
+            setTitle();
+        } catch (err) {
+            console.error('fetchMessages error', err);
         }
     }
 
-    // send message
     async function sendMessage(text) {
         try {
             const body = new URLSearchParams();
             body.append('message_text', text);
-            const res = await fetch(basePath + '/message/create', {
+            body.append('recipient_id', selectedUserId);
+
+            const res = await fetch(baseUrl + '/message/create', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body.toString()
             });
-            if (res && res.ok) {
-                // after sending, refresh messages
-                await fetchMessages();
-            } else {
-                // try refreshing anyway
-                await fetchMessages();
+
+            if (!res.ok) {
+                const errText = await res.text().catch(() => '');
+                console.warn('sendMessage failed', res.status, errText);
             }
-        } catch (e) {
-            console.error('sendMessage error', e);
+
+            await fetchMessages();
+        } catch (err) {
+            console.error('sendMessage error', err);
         }
     }
 
-    function showTimestamp() {
-        const now = new Date();
-        return now.getHours().toString().padStart(2, '0') + ':' +
-               now.getMinutes().toString().padStart(2, '0') + ':' +
-               now.getSeconds().toString().padStart(2, '0');
+    function setActiveUserButton(userId) {
+        document.querySelectorAll('.user-btn.active').forEach(b => b.classList.remove('active'));
+        if (!userId) return;
+        const btn = document.querySelector('.user-btn[data-userid="' + userId + '"]');
+        if (btn) btn.classList.add('active');
     }
 
-    
-    form.addEventListener('submit', function(e){
-        e.preventDefault();
-        const text = input.value.trim();
-        if (!text) return;
-        sendMessage(text);
-        input.value = '';
-        input.focus();
-    });
+    // user click
+    if (usersContainer) {
+        usersContainer.addEventListener('click', function (ev) {
+            const btn = ev.target.closest && ev.target.closest('.user-btn');
+            if (!btn) return;
 
-    // load initially and poll
+            selectedUserId = parseInt(btn.getAttribute('data-userid'), 10);
+            setActiveUserButton(selectedUserId);
+            fetchMessages();
+        });
+    }
+
+    // all messages click
+    if (btnAll) {
+        btnAll.addEventListener('click', function () {
+            selectedUserId = null;
+            setActiveUserButton(null);
+            fetchMessages();
+        });
+    }
+
+    // form submit
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const text = (input.value || '').trim();
+            if (!text) return;
+
+            sendMessage(text);
+            input.value = '';
+            input.focus();
+        });
+    }
+
+    // initial load + poll
     fetchMessages();
     setInterval(fetchMessages, 2000);
 })();
 </script>
+
+<style>
+.container { max-width:900px; margin:24px auto; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial; color:#222; }
+.box { background:#fff; border-radius:10px; padding:18px; box-shadow:0 6px 18px rgba(23,24,26,0.06); }
+
+.with-sidebar { display:flex; gap:16px; align-items:flex-start; }
+#user-list { width:220px; }
+.main-panel { flex:1; }
+
+h1 { margin:0 0 8px; font-size:26px; color:#111; }
+h3 { margin:14px 0 8px; font-size:16px; color:#444; font-weight:600; }
+
+#users { display:flex; flex-direction:column; gap:8px; }
+.user-btn { width:100%; text-align:left; padding:8px; border-radius:8px; border:1px solid #e6e9ee; background:#fff; cursor:pointer; }
+.user-btn.active { background:#e8f0ff; border-color:#cfe0ff; }
+.sidebar-actions { margin-top:10px; }
+
+#chat-window { border-radius:8px; background:#fafafa; border:1px solid #e6e9ee; height:300px; overflow:auto; padding:12px; }
+
+#messages { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+#messages li { max-width: 50%;display:flex; align-items:flex-start; gap:8px; padding:10px; border-radius:8px; background:rgba(10,13,20,0.02); }
+#messages li strong { color:#1a73e8; min-width:60px; font-weight:700; }
+#messages li span { color:#222; word-break:break-word; line-height:1.35; }
+#messages li.empty { text-align:center; color:#777; background:transparent; }
+
+#messages li.mine { margin-left:auto; background:#eaf8ea; text-align:right; flex-direction:row-reverse; }
+#messages li.mine strong { color:#0b6b2a; min-width:60px; }
+#messages li.mine span { text-align:right; }
+
+#chat-form { display:flex; gap:8px; margin-top:12px; align-items:center; }
+#message_text { flex:1; padding:10px 12px; border-radius:8px; border:1px solid #dce3ee; background:#fff; outline:none; font-size:14px; }
+#chat-form input[type="submit"] { background:#1a73e8; color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
+
+.hint { margin-top:10px; font-size:12px; color:#666; }
+
+@media (max-width:600px) {
+    .container { padding:12px; }
+    #chat-window { height:240px; }
+    #messages li strong { min-width:120px; font-size:13px; }
+}
+</style>
